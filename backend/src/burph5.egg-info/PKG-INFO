@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: burph5
+Version: 0.1.0
+Summary: Local HTTP repeater with API, CLI, MCP, and HTTP proxy capture.
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi<0.136.0,>=0.135.1
+Requires-Dist: httpx<0.29.0,>=0.28.1
+Requires-Dist: mcp<2.0.0,>=1.26.0
+Requires-Dist: pydantic<3.0.0,>=2.11.0
+Requires-Dist: typer<0.17.0,>=0.16.0
+Requires-Dist: uvicorn[standard]<0.39.0,>=0.38.0
+Provides-Extra: dev
+Requires-Dist: pytest<9.0.0,>=8.4.0; extra == "dev"
+
+# burph5 backend
+
+FastAPI + CLI + MCP + local HTTP proxy backend for burph5.
+
+## Run
+
+```powershell
+cd D:\挖洞\burph5\backend
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -e .[dev]
+.\.venv\Scripts\python -m burph5.cli serve
+```
+
+## CLI
+
+```powershell
+.\.venv\Scripts\python -m burph5.cli replay --raw-file req.txt
+.\.venv\Scripts\python -m burph5.cli history list
+.\.venv\Scripts\python -m burph5.cli proxy start
+```

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "burph5"
+version = "0.1.0"
+description = "Local HTTP repeater with API, CLI, MCP, and HTTP proxy capture."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.135.1,<0.136.0",
+  "httpx>=0.28.1,<0.29.0",
+  "mcp>=1.26.0,<2.0.0",
+  "pydantic>=2.11.0,<3.0.0",
+  "typer>=0.16.0,<0.17.0",
+  "uvicorn[standard]>=0.38.0,<0.39.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.0,<9.0.0",
+]
+
+[project.scripts]
+burph5-api = "burph5.cli:serve"
+burph5-cli = "burph5.cli:app"
+burph5-mcp = "burph5.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

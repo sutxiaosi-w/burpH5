@@ -4,10 +4,18 @@ import {
   clearHistory as clearHistoryRequest,
   createCollection,
   deleteHistoryItem as deleteHistoryItemRequest,
+  deleteProxyCertificates as deleteProxyCertificatesRequest,
   fetchCollections,
   fetchHistory,
+  fetchProxyFlowDetail,
+  fetchProxyFlows,
   fetchProxyStatus,
+  clearProxyLeafCertificates as clearProxyLeafCertificatesRequest,
+  ensureProxyCertificate as ensureProxyCertificateRequest,
+  installProxyCertificate as installProxyCertificateRequest,
+  getProxyCertificateDownloadUrl,
   parseRawRequest,
+  resetProxyCertificate as resetProxyCertificateRequest,
   runSavedCollection,
   sendReplay,
   updateCollection,
@@ -18,6 +26,9 @@ import type {
   CollectionEntry,
   CollectionItem,
   HistoryItem,
+  ProxyFlowDetail,
+  ProxyFlowSummary,
+  ProxySettings,
   ProxyStatus,
   ReplayExecuteResponse,
   ReplayRequest,
@@ -32,13 +43,23 @@ export const useWorkspaceStore = defineStore('workspace', {
   state: () => ({
     loading: false,
     history: [] as HistoryItem[],
+    proxyFlows: [] as ProxyFlowSummary[],
+    proxyFlowDetail: null as ProxyFlowDetail | null,
     collections: [] as CollectionItem[],
     proxyStatus: {
       enabled: false,
       host: '127.0.0.1',
       port: 8899,
       capture_https: false,
+      bypass_hosts: [],
       running: false,
+      ca_ready: false,
+      ca_installed: null,
+      ca_subject: null,
+      ca_thumbprint: null,
+      ca_cert_path: null,
+      leaf_cert_count: 0,
+      last_error: null,
     } as ProxyStatus,
     repeaterRawRequest: starterRequest,
     repeaterParsedRequest: null as ReplayRequest | null,
@@ -63,6 +84,14 @@ export const useWorkspaceStore = defineStore('workspace', {
     },
     async loadHistory(source?: string) {
       this.history = await fetchHistory(source)
+    },
+    async loadProxyFlows(limit = 200) {
+      this.proxyFlows = await fetchProxyFlows(limit)
+      return this.proxyFlows
+    },
+    async loadProxyFlowDetail(id: string) {
+      this.proxyFlowDetail = await fetchProxyFlowDetail(id)
+      return this.proxyFlowDetail
     },
     async deleteHistoryItem(id: string) {
       await deleteHistoryItemRequest(id)
@@ -136,13 +165,38 @@ export const useWorkspaceStore = defineStore('workspace', {
       return this.lastBatchRun
     },
     async saveProxyStatus() {
-      this.proxyStatus = await updateProxyStatus({
+      const payload: ProxySettings = {
         enabled: this.proxyStatus.enabled,
         host: this.proxyStatus.host,
         port: this.proxyStatus.port,
-        capture_https: false,
-      })
+        capture_https: this.proxyStatus.capture_https,
+        bypass_hosts: [...this.proxyStatus.bypass_hosts],
+      }
+      this.proxyStatus = await updateProxyStatus(payload)
       return this.proxyStatus
+    },
+    async ensureProxyCertificate() {
+      this.proxyStatus = await ensureProxyCertificateRequest()
+      return this.proxyStatus
+    },
+    async installProxyCertificate() {
+      this.proxyStatus = await installProxyCertificateRequest()
+      return this.proxyStatus
+    },
+    async clearProxyLeafCertificates() {
+      this.proxyStatus = await clearProxyLeafCertificatesRequest()
+      return this.proxyStatus
+    },
+    async deleteProxyCertificates() {
+      this.proxyStatus = await deleteProxyCertificatesRequest()
+      return this.proxyStatus
+    },
+    async resetProxyCertificate() {
+      this.proxyStatus = await resetProxyCertificateRequest()
+      return this.proxyStatus
+    },
+    getProxyCertificateDownloadUrl() {
+      return getProxyCertificateDownloadUrl()
     },
   },
 })

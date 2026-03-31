@@ -5,7 +5,6 @@ chcp 65001 >nul
 set "ROOT_DIR=%~dp0"
 set "BACKEND_DIR=%ROOT_DIR%backend"
 set "FRONTEND_DIR=%ROOT_DIR%frontend"
-set "PYTHON_EXE=%BACKEND_DIR%\.venv\Scripts\python.exe"
 set "APP_FILE=%ROOT_DIR%app.py"
 set "RUN_DIR=%ROOT_DIR%.run"
 set "APP_PID_FILE=%RUN_DIR%\app.pid"
@@ -13,15 +12,27 @@ set "APP_PORT=8765"
 set "APP_HEALTH_URL=http://127.0.0.1:%APP_PORT%/api/health"
 set "APP_URL=http://127.0.0.1:%APP_PORT%"
 set "MAX_WAIT_SECONDS=45"
+set "PYTHON_CMD="
 
 if not exist "%RUN_DIR%" mkdir "%RUN_DIR%" >nul 2>nul
 
 echo [burph5] Checking environment...
 
-if not exist "%PYTHON_EXE%" (
-    echo [error] Backend virtualenv not found:
-    echo %PYTHON_EXE%
-    echo Create backend\.venv and install dependencies first.
+where py >nul 2>nul
+if not errorlevel 1 (
+    set "PYTHON_CMD=py -3"
+)
+
+if not defined PYTHON_CMD (
+    where python >nul 2>nul
+    if not errorlevel 1 (
+        set "PYTHON_CMD=python"
+    )
+)
+
+if not defined PYTHON_CMD (
+    echo [error] Python not found in PATH.
+    echo Install Python 3.12+ and make sure `python` or `py` is available.
     pause
     exit /b 1
 )
@@ -33,23 +44,33 @@ if not exist "%APP_FILE%" (
     exit /b 1
 )
 
-if not exist "%FRONTEND_DIR%\node_modules" (
-    echo [warn] frontend\node_modules not found. Installing...
-    pushd "%FRONTEND_DIR%"
-    npm.cmd install
-    if errorlevel 1 (
-        popd
-        echo [error] Frontend dependency install failed.
-        pause
-        exit /b 1
-    )
-    popd
+echo [burph5] Using Python:
+echo %PYTHON_CMD%
+
+%PYTHON_CMD% -c "import fastapi, httpx, mcp, pydantic, typer, uvicorn" >nul 2>nul
+if errorlevel 1 (
+    echo [error] Missing Python dependencies.
+    echo Run:
+    echo   cd /d "%ROOT_DIR%"
+    echo   %PYTHON_CMD% -m pip install -r requirements.txt
+    pause
+    exit /b 1
 )
 
 if not exist "%FRONTEND_DIR%\dist\index.html" (
     echo [burph5] frontend\dist missing. Building frontend...
     pushd "%FRONTEND_DIR%"
-    npm.cmd run build
+    if not exist "node_modules" (
+        echo [warn] frontend\node_modules not found. Installing...
+        call npm.cmd install
+        if errorlevel 1 (
+            popd
+            echo [error] Frontend dependency install failed.
+            pause
+            exit /b 1
+        )
+    )
+    call npm.cmd run build
     if errorlevel 1 (
         popd
         echo [error] Frontend build failed.
@@ -64,7 +85,9 @@ del "%APP_PID_FILE%" >nul 2>nul
 
 echo [burph5] Starting single-port app in hidden window...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$p = Start-Process -FilePath '%PYTHON_EXE%' -ArgumentList '%APP_FILE% --host 127.0.0.1 --port %APP_PORT%' -WorkingDirectory '%ROOT_DIR%' -WindowStyle Hidden -PassThru; Set-Content -Path '%APP_PID_FILE%' -Value $p.Id -Encoding ascii"
+  "$command = '%PYTHON_CMD% \"%APP_FILE%\" --host 127.0.0.1 --port %APP_PORT%';" ^
+  "$p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $command -WorkingDirectory '%ROOT_DIR%' -WindowStyle Hidden -PassThru;" ^
+  "Set-Content -Path '%APP_PID_FILE%' -Value $p.Id -Encoding ascii"
 if errorlevel 1 (
     echo [error] App failed to start.
     pause

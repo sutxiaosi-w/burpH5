@@ -40,8 +40,9 @@ onMounted(async () => {
   <section class="page">
     <div class="page-header">
       <div>
+        <span class="page-kicker">BATCH</span>
         <h2>请求集合</h2>
-        <p>保存可复用请求，支持顺序执行和有限并发批量运行。</p>
+        <p>把高频请求整理成集合，按顺序或有限并发批量执行。</p>
       </div>
       <div class="toolbar">
         <label class="inline-field">
@@ -94,6 +95,10 @@ onMounted(async () => {
           </div>
         </div>
       </section>
+      <div v-else class="panel empty-state compact-empty">
+        <h4>还没有可运行的集合</h4>
+        <p>去“请求重放”页保存一条请求，这里就会出现第一组可复用的脚本化流量。</p>
+      </div>
     </div>
 
     <section class="panel" v-if="workspace.lastBatchRun">

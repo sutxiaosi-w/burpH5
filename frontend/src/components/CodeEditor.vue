@@ -69,6 +69,9 @@ function mountEditor() {
           '.cm-selectionBackground': {
             backgroundColor: '#d7efdf',
           },
+          '.cm-lineNumbers': {
+            color: '#84a392',
+          },
         }),
         EditorState.readOnly.of(props.readOnly),
         EditorView.editable.of(!props.readOnly),

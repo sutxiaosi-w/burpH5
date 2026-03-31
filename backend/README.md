@@ -2,35 +2,104 @@
 
 FastAPI + CLI + MCP + local HTTP proxy backend for burph5.
 
-这个后端既可以给前端页面用，也可以给 `qclaw`、脚本和其他 Agent 用。
+这个后端既可以给前端页面用，也可以给脚本和其他本地工具调用。
 
 ## Run
 
 ```powershell
-cd D:\挖洞\burph5\backend
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -e .[dev]
-.\.venv\Scripts\python -m burph5.cli serve
+cd backend
+python -m pip install -e .[dev]
+python -m burph5.cli serve
 ```
 
 ## CLI
 
 ```powershell
-.\.venv\Scripts\python -m burph5.cli replay --raw-file req.txt
-.\.venv\Scripts\python -m burph5.cli history list
-.\.venv\Scripts\python -m burph5.cli proxy start
+python -m burph5.cli replay --raw-file req.txt
+python -m burph5.cli history list
+python -m burph5.cli proxy start --capture-https
+python -m burph5.cli proxy ca ensure
+python -m burph5.cli proxy ca install
+python -m burph5.cli proxy ca reset
 ```
 
-## qclaw 接入
+## 发包
 
-推荐顺序：
+### 1. 保存原始数据包
 
-1. `qclaw` 优先用自带 `browser` 工具发现真实接口
-2. 如果 `qclaw browser` 拿不到网络请求，再补 `Chrome DevTools MCP`
-3. `qclaw` 把请求送到 `http://127.0.0.1:8765/api/replay`
-4. 需要时再调用 `burph5.mcp_server` 或 CLI
+把请求保存成当前目录下的 `req.txt`，格式就是完整原始 HTTP：
 
-如果要输出漏洞报告，建议保留这些字段：
+```http
+GET http://localhost/vul/rce/rce_ping.php HTTP/1.1
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+Cookie: PHPSESSID=6ji8hu74ec2hphv88d5aqf646g
+Referer: http://localhost/
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0
+sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Microsoft Edge";v="146"
+sec-ch-ua-mobile: ?0
+sec-ch-ua-platform: "Windows"
+```
+
+### 2. 用 CLI 发包
+
+```powershell
+python -m burph5.cli replay --raw-file .\req.txt
+```
+
+如果请求行为相对路径形式，补默认协议：
+
+```powershell
+python -m burph5.cli replay --raw-file .\req.txt --default-scheme http
+```
+
+### 3. 用 HTTP API 发包
+
+```powershell
+$raw = Get-Content -Raw .\req.txt
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8765/api/replay `
+  -ContentType 'application/json' `
+  -Body (@{
+    raw_request = $raw
+    source = 'api'
+    persist = $true
+    default_scheme = 'http'
+  } | ConvertTo-Json -Depth 10)
+```
+
+## MCP
+
+```powershell
+python -m burph5.mcp_server
+```
+
+常用工具：
+
+- `replay_request`
+- `parse_raw_request`
+- `list_history`
+- `get_history_item`
+- `save_collection`
+- `run_collection`
+
+`replay_request` 示例参数：
+
+```json
+{
+  "raw_request": "GET http://localhost/vul/rce/rce_ping.php HTTP/1.1\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\nCookie: PHPSESSID=6ji8hu74ec2hphv88d5aqf646g\r\nReferer: http://localhost/\r\nUpgrade-Insecure-Requests: 1\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0\r\nsec-ch-ua: \"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\"\r\nsec-ch-ua-mobile: ?0\r\nsec-ch-ua-platform: \"Windows\"\r\n\r\n",
+  "default_scheme": "http"
+}
+```
+
+## Tests
+
+```powershell
+pytest -q
+```
+
+## 常见输出字段
 
 - `raw_request`
 - `raw_response`

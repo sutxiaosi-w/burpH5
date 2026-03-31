@@ -123,6 +123,46 @@ def create_app(
     async def update_proxy(payload: ProxySettings):
         return await app_service.update_proxy(payload)
 
+    @app.get("/api/proxy/flows")
+    async def list_proxy_flows(limit: int = Query(default=200, ge=1, le=1000)):
+        return app_service.list_proxy_flows(limit=limit)
+
+    @app.get("/api/proxy/flows/{flow_id}")
+    async def get_proxy_flow(flow_id: str):
+        item = app_service.get_proxy_flow(flow_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Proxy flow not found.")
+        return item
+
+    @app.post("/api/proxy/certificate/ensure")
+    async def ensure_proxy_certificate():
+        return app_service.ensure_proxy_certificate()
+
+    @app.post("/api/proxy/certificate/install")
+    async def install_proxy_certificate():
+        return app_service.install_proxy_certificate()
+
+    @app.post("/api/proxy/certificate/clear-leaf")
+    async def clear_proxy_leaf_certificates():
+        return app_service.clear_proxy_leaf_certificates()
+
+    @app.post("/api/proxy/certificate/delete")
+    async def delete_proxy_certificates():
+        return await app_service.delete_proxy_certificates()
+
+    @app.post("/api/proxy/certificate/reset")
+    async def reset_proxy_certificate():
+        return await app_service.reset_proxy_certificate()
+
+    @app.get("/api/proxy/certificate/download")
+    async def download_proxy_certificate():
+        cert_path = app_service.get_proxy_certificate_path()
+        return FileResponse(
+            cert_path,
+            media_type="application/x-x509-ca-cert",
+            filename=cert_path.name,
+        )
+
     frontend_dist_dir = app_service.settings.frontend_dist_dir
     if frontend_dist_dir.joinpath("index.html").exists():
         index_file = frontend_dist_dir / "index.html"

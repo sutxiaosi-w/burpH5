@@ -7,6 +7,9 @@ import type {
   HistoryClearResponse,
   HistoryDeleteResponse,
   HistoryItem,
+  ProxyFlowDetail,
+  ProxyFlowSummary,
+  ProxySettings,
   ProxyStatus,
   ReplayExecuteResponse,
   ReplayRequest,
@@ -85,7 +88,48 @@ export async function fetchProxyStatus(): Promise<ProxyStatus> {
   return response.data
 }
 
-export async function updateProxyStatus(payload: Omit<ProxyStatus, 'running'>): Promise<ProxyStatus> {
+export async function fetchProxyFlows(limit = 200): Promise<ProxyFlowSummary[]> {
+  const response = await client.get<ProxyFlowSummary[]>('/api/proxy/flows', {
+    params: { limit },
+  })
+  return response.data
+}
+
+export async function fetchProxyFlowDetail(id: string): Promise<ProxyFlowDetail> {
+  const response = await client.get<ProxyFlowDetail>(`/api/proxy/flows/${id}`)
+  return response.data
+}
+
+export async function updateProxyStatus(payload: ProxySettings): Promise<ProxyStatus> {
   const response = await client.put<ProxyStatus>('/api/proxy', payload)
   return response.data
+}
+
+export async function ensureProxyCertificate(): Promise<ProxyStatus> {
+  const response = await client.post<ProxyStatus>('/api/proxy/certificate/ensure')
+  return response.data
+}
+
+export async function installProxyCertificate(): Promise<ProxyStatus> {
+  const response = await client.post<ProxyStatus>('/api/proxy/certificate/install')
+  return response.data
+}
+
+export async function clearProxyLeafCertificates(): Promise<ProxyStatus> {
+  const response = await client.post<ProxyStatus>('/api/proxy/certificate/clear-leaf')
+  return response.data
+}
+
+export async function deleteProxyCertificates(): Promise<ProxyStatus> {
+  const response = await client.post<ProxyStatus>('/api/proxy/certificate/delete')
+  return response.data
+}
+
+export async function resetProxyCertificate(): Promise<ProxyStatus> {
+  const response = await client.post<ProxyStatus>('/api/proxy/certificate/reset')
+  return response.data
+}
+
+export function getProxyCertificateDownloadUrl(): string {
+  return `${API_BASE_URL}/api/proxy/certificate/download`
 }

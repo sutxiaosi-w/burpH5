@@ -1,4 +1,0 @@
-[console_scripts]
-burph5-api = burph5.cli:serve
-burph5-cli = burph5.cli:app
-burph5-mcp = burph5.mcp_server:main

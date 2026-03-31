@@ -24,6 +24,7 @@ TEXT_CONTENT_TYPES = (
 class ExecutionArtifacts:
     request: ReplayRequest
     result: ReplayResult
+    response_content: bytes
     response_wire_bytes: bytes
 
 
@@ -43,7 +44,9 @@ class ReplayEngine:
             timeout = httpx.Timeout(normalized.timeout_ms / 1000)
             async with httpx.AsyncClient(
                 follow_redirects=normalized.follow_redirects,
+                http2=True,
                 timeout=timeout,
+                trust_env=False,
             ) as client:
                 response = await client.request(
                     method=normalized.method.upper(),
@@ -59,7 +62,12 @@ class ReplayEngine:
                 raw_response="",
                 error=str(exc),
             )
-            return ExecutionArtifacts(request=normalized, result=result, response_wire_bytes=b"")
+            return ExecutionArtifacts(
+                request=normalized,
+                result=result,
+                response_content=b"",
+                response_wire_bytes=b"",
+            )
 
         elapsed_ms = int((perf_counter() - start) * 1000)
         response_headers = [Header(name=name, value=value) for name, value in response.headers.multi_items()]
@@ -78,7 +86,14 @@ class ReplayEngine:
         return ExecutionArtifacts(
             request=normalized,
             result=result,
-            response_wire_bytes=build_wire_response_bytes(response.status_code, response.reason_phrase, response_headers, response.content),
+            response_content=response.content,
+            response_wire_bytes=build_wire_response_bytes(
+                response.status_code,
+                response.reason_phrase,
+                response_headers,
+                response.content,
+                sanitize_for_proxy=True,
+            ),
         )
 
 
@@ -127,8 +142,28 @@ def build_wire_response_bytes(
     reason: str,
     headers: list[Header],
     body: bytes,
+    sanitize_for_proxy: bool = False,
 ) -> bytes:
+    response_headers = sanitize_proxy_response_headers(headers, len(body)) if sanitize_for_proxy else headers
     header_blob = [f"HTTP/1.1 {status_code} {reason}"]
-    header_blob.extend(f"{header.name}: {header.value}" for header in headers)
+    header_blob.extend(f"{header.name}: {header.value}" for header in response_headers)
     prefix = ("\r\n".join(header_blob) + "\r\n\r\n").encode("latin-1", errors="replace")
     return prefix + body
+
+
+def sanitize_proxy_response_headers(headers: list[Header], body_length: int) -> list[Header]:
+    hop_by_hop = {
+        "connection",
+        "content-encoding",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+        "content-length",
+    }
+    sanitized = [header for header in headers if header.name.lower() not in hop_by_hop]
+    sanitized.append(Header(name="Content-Length", value=str(body_length)))
+    return sanitized

@@ -94,10 +94,56 @@ export interface BatchRun {
   created_at: string
 }
 
-export interface ProxyStatus {
+export interface ProxySettings {
   enabled: boolean
   host: string
   port: number
   capture_https: boolean
+  bypass_hosts: string[]
+}
+
+export interface ProxyStatus extends ProxySettings {
   running: boolean
+  ca_ready: boolean
+  ca_installed?: boolean | null
+  ca_subject?: string | null
+  ca_thumbprint?: string | null
+  ca_cert_path?: string | null
+  leaf_cert_count: number
+  last_error?: string | null
+}
+
+export type ProxyProtocolMode = 'http' | 'https-mitm' | 'tunnel' | 'upgrade' | 'sse'
+
+export interface ProxyFlowSummary {
+  id: string
+  history_id?: string | null
+  method: string
+  url: string
+  host: string
+  path: string
+  protocol_mode: ProxyProtocolMode
+  client_http_version: string
+  upstream_http_version?: string | null
+  status_code?: number | null
+  reason?: string | null
+  is_tls_mitm: boolean
+  is_passthrough: boolean
+  is_websocket: boolean
+  is_sse: boolean
+  request_headers_path: string
+  request_body_path: string
+  response_headers_path: string
+  response_body_path: string
+  request_content_type?: string | null
+  response_content_type?: string | null
+  request_body_size: number
+  response_body_size: number
+  error?: string | null
+  created_at: string
+}
+
+export interface ProxyFlowDetail extends ProxyFlowSummary {
+  raw_request: string
+  raw_response: string
 }

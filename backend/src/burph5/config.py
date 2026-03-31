@@ -23,6 +23,14 @@ class AppSettings:
         return self.data_dir / "burph5.db"
 
     @property
+    def certs_dir(self) -> Path:
+        return self.data_dir / "certs"
+
+    @property
+    def captures_dir(self) -> Path:
+        return self.data_dir / "captures"
+
+    @property
     def project_root(self) -> Path:
         return self.backend_root.parent
 

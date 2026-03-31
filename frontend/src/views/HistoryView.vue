@@ -101,8 +101,9 @@ onMounted(() => {
   <section class="page">
     <div class="page-header">
       <div>
+        <span class="page-kicker">TRACE</span>
         <h2>历史记录</h2>
-        <p>查看代理抓包、接口调用、命令行执行和页面重放留下的请求记录。</p>
+        <p>集中查看代理抓包、页面回放、CLI 和 API 留下的请求轨迹。</p>
       </div>
       <div class="toolbar">
         <select v-model="sourceFilter" class="input">
@@ -217,8 +218,8 @@ onMounted(() => {
           </div>
         </template>
         <div v-else class="empty-state">
-          <h3>请选择一条记录查看详情</h3>
-          <p>左侧列表只展示摘要信息，点击后会在这里显示原始请求、原始响应和快捷操作。</p>
+          <h3>从左侧选一条记录</h3>
+          <p>这里会展开原始请求、原始响应和进一步处理入口。</p>
         </div>
       </section>
     </div>

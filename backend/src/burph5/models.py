@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 HistorySource = Literal["ui", "api", "cli", "mcp", "proxy"]
+ProxyProtocolMode = Literal["http", "https-mitm", "tunnel", "upgrade", "sse"]
 
 
 class Header(BaseModel):
@@ -126,7 +127,48 @@ class ProxySettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = Field(default=8899, ge=1, le=65535)
     capture_https: bool = False
+    bypass_hosts: list[str] = Field(default_factory=list)
 
 
 class ProxyStatus(ProxySettings):
     running: bool = False
+    ca_ready: bool = False
+    ca_installed: bool | None = None
+    ca_subject: str | None = None
+    ca_thumbprint: str | None = None
+    ca_cert_path: str | None = None
+    leaf_cert_count: int = 0
+    last_error: str | None = None
+
+
+class ProxyFlowSummary(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    history_id: str | None = None
+    method: str
+    url: str
+    host: str
+    path: str
+    protocol_mode: ProxyProtocolMode
+    client_http_version: str
+    upstream_http_version: str | None = None
+    status_code: int | None = None
+    reason: str | None = None
+    is_tls_mitm: bool = False
+    is_passthrough: bool = False
+    is_websocket: bool = False
+    is_sse: bool = False
+    request_headers_path: str
+    request_body_path: str
+    response_headers_path: str
+    response_body_path: str
+    request_content_type: str | None = None
+    response_content_type: str | None = None
+    request_body_size: int = 0
+    response_body_size: int = 0
+    error: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ProxyFlowDetail(ProxyFlowSummary):
+    raw_request: str = ""
+    raw_response: str = ""

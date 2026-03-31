@@ -9,7 +9,9 @@ description = "Local HTTP repeater with API, CLI, MCP, and HTTP proxy capture."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=46.0.0,<47.0.0",
   "fastapi>=0.135.1,<0.136.0",
+  "h2>=4.2.0,<5.0.0",
   "httpx>=0.28.1,<0.29.0",
   "mcp>=1.26.0,<2.0.0",
   "pydantic>=2.11.0,<3.0.0",

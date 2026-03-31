@@ -19,7 +19,7 @@
 ## 启动
 
 ```powershell
-cd D:\挖洞\burph5\frontend
+cd frontend
 npm.cmd install
 npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ```
@@ -27,5 +27,5 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ## 说明
 
 - 前端主要给人工查看和重放使用
-- `qclaw` 本身通常不直接依赖前端页面
-- 对 `qclaw` 来说，更关键的是后端 API、MCP，以及它自己的 `browser` 工具或补充的 `Chrome DevTools MCP`
+- 开发模式默认连接 `http://127.0.0.1:8765`
+- 发布到本地一体化入口前，需要先执行 `npm.cmd run build`

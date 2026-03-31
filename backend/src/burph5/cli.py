@@ -15,10 +15,12 @@ app = typer.Typer(help="burph5 command line interface")
 history_app = typer.Typer(help="History commands")
 collection_app = typer.Typer(help="Collection commands")
 proxy_app = typer.Typer(help="Proxy commands")
+proxy_ca_app = typer.Typer(help="Proxy CA certificate commands")
 
 app.add_typer(history_app, name="history")
 app.add_typer(collection_app, name="collection")
 app.add_typer(proxy_app, name="proxy")
+proxy_app.add_typer(proxy_ca_app, name="ca")
 
 
 def print_json(data: object) -> None:
@@ -84,11 +86,21 @@ def collection_run(
 def proxy_start(
     host: str = "127.0.0.1",
     port: int = 8899,
+    capture_https: bool = False,
+    bypass_host: Annotated[list[str], typer.Option("--bypass-host")] = [],
 ) -> None:
     service = get_service()
 
     async def runner() -> None:
-        await service.update_proxy(ProxySettings(enabled=True, host=host, port=port, capture_https=False))
+        await service.update_proxy(
+            ProxySettings(
+                enabled=True,
+                host=host,
+                port=port,
+                capture_https=capture_https,
+                bypass_hosts=list(bypass_host),
+            )
+        )
         typer.echo(f"Proxy listening on {host}:{port}")
         try:
             while True:
@@ -100,6 +112,25 @@ def proxy_start(
         asyncio.run(runner())
     except KeyboardInterrupt:
         typer.echo("Proxy stopped.")
+
+
+@proxy_ca_app.command("ensure")
+def proxy_ca_ensure() -> None:
+    service = get_service()
+    print_json(service.ensure_proxy_certificate().model_dump(mode="json"))
+
+
+@proxy_ca_app.command("install")
+def proxy_ca_install() -> None:
+    service = get_service()
+    print_json(service.install_proxy_certificate().model_dump(mode="json"))
+
+
+@proxy_ca_app.command("reset")
+def proxy_ca_reset() -> None:
+    service = get_service()
+    result = asyncio.run(service.reset_proxy_certificate())
+    print_json(result.model_dump(mode="json"))
 
 
 def main() -> None:

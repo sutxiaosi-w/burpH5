@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -9,7 +8,10 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR / "backend"
 BACKEND_SRC_DIR = BACKEND_DIR / "src"
-VENV_PYTHON = BACKEND_DIR / ".venv" / "Scripts" / "python.exe"
+INSTALL_HINT = (
+    "Missing backend dependencies.\n"
+    f"Run:\n  cd {ROOT_DIR}\n  python -m pip install -r requirements.txt"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,25 +21,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def ensure_backend_python() -> None:
-    current_python = Path(sys.executable).resolve()
-    if current_python == VENV_PYTHON.resolve():
-        return
-    if not VENV_PYTHON.exists():
-        raise SystemExit(f"Backend virtualenv not found: {VENV_PYTHON}")
+def ensure_backend_source_path() -> None:
+    if not BACKEND_SRC_DIR.exists():
+        raise SystemExit(f"Backend source directory not found: {BACKEND_SRC_DIR}")
 
-    subprocess.run([str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]], check=True)
-    raise SystemExit(0)
+    backend_src = str(BACKEND_SRC_DIR)
+    if backend_src not in sys.path:
+        sys.path.insert(0, backend_src)
 
 
 def main() -> None:
-    ensure_backend_python()
-
-    sys.path.insert(0, str(BACKEND_SRC_DIR))
-
-    import uvicorn
-
-    from burph5.main import create_app
+    ensure_backend_source_path()
+    try:
+        import uvicorn
+        from burph5.main import create_app
+    except ModuleNotFoundError as exc:
+        raise SystemExit(f"{INSTALL_HINT}\n\nImport error: {exc}") from exc
 
     args = parse_args()
     app = create_app()

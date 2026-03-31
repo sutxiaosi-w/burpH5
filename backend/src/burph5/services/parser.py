@@ -8,6 +8,7 @@ from burph5.models import Header, ReplayRequest
 
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}")
+HEADER_LINE_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+\s*:")
 
 
 def apply_variables(text: str | None, variables: dict[str, str]) -> str | None:
@@ -47,11 +48,33 @@ def parse_raw_request(raw_request: str, default_scheme: str = "http") -> ReplayR
 
 
 def split_raw_request(raw_request: str) -> tuple[str, str]:
-    if "\n\n" in raw_request:
-        header_part, body = raw_request.split("\n\n", 1)
-    else:
-        header_part, body = raw_request, ""
-    return header_part, body
+    lines = raw_request.split("\n")
+    if not lines:
+        return raw_request, ""
+
+    header_lines = [lines[0]]
+    index = 1
+    while index < len(lines):
+        line = lines[index]
+        if line.strip():
+            header_lines.append(line)
+            index += 1
+            continue
+
+        lookahead = index + 1
+        while lookahead < len(lines) and not lines[lookahead].strip():
+            lookahead += 1
+
+        if lookahead >= len(lines):
+            return "\n".join(header_lines), ""
+
+        if HEADER_LINE_PATTERN.match(lines[lookahead]):
+            index = lookahead
+            continue
+
+        return "\n".join(header_lines), "\n".join(lines[lookahead:])
+
+    return "\n".join(header_lines), ""
 
 
 def parse_request_line(line: str) -> tuple[str, str]:

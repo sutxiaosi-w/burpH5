@@ -10,6 +10,7 @@
       </div>
       <nav class="nav-links">
         <RouterLink to="/" active-class="is-active">历史记录</RouterLink>
+        <RouterLink to="/proxy" active-class="is-active">代理记录</RouterLink>
         <RouterLink to="/repeater" active-class="is-active">请求重放</RouterLink>
         <RouterLink to="/collections" active-class="is-active">请求集合</RouterLink>
         <RouterLink to="/settings" active-class="is-active">系统设置</RouterLink>

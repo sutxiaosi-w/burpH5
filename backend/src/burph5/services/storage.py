@@ -5,7 +5,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from burph5.models import BatchRun, Collection, CollectionEntry, CollectionWrite, HistoryItem, ProxySettings, ReplayRequest, ReplayResult
+from burph5.models import BatchRun, Collection, CollectionEntry, CollectionWrite, HistoryItem, ProxyFlowSummary, ProxySettings, ReplayRequest, ReplayResult
 
 
 class SQLiteRepository:
@@ -49,6 +49,13 @@ class SQLiteRepository:
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS proxy_flows (
+                    id TEXT PRIMARY KEY,
+                    history_id TEXT,
+                    created_at TEXT NOT NULL,
+                    flow_json TEXT NOT NULL
                 );
                 """
             )
@@ -185,6 +192,68 @@ class SQLiteRepository:
                 (settings.model_dump_json(),),
             )
         return settings
+
+    def add_proxy_flow(self, flow: ProxyFlowSummary) -> ProxyFlowSummary:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO proxy_flows (id, history_id, created_at, flow_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    flow.id,
+                    flow.history_id,
+                    flow.created_at.isoformat(),
+                    flow.model_dump_json(),
+                ),
+            )
+        return flow
+
+    def update_proxy_flow(self, flow: ProxyFlowSummary) -> ProxyFlowSummary:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE proxy_flows
+                SET history_id = ?, created_at = ?, flow_json = ?
+                WHERE id = ?
+                """,
+                (
+                    flow.history_id,
+                    flow.created_at.isoformat(),
+                    flow.model_dump_json(),
+                    flow.id,
+                ),
+            )
+        return flow
+
+    def list_proxy_flows(self, limit: int = 200) -> list[ProxyFlowSummary]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT flow_json FROM proxy_flows ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [ProxyFlowSummary.model_validate_json(row["flow_json"]) for row in rows]
+
+    def get_proxy_flow(self, flow_id: str) -> ProxyFlowSummary | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT flow_json FROM proxy_flows WHERE id = ?", (flow_id,)).fetchone()
+        return ProxyFlowSummary.model_validate_json(row["flow_json"]) if row else None
+
+    def get_proxy_flow_by_history_id(self, history_id: str) -> ProxyFlowSummary | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT flow_json FROM proxy_flows WHERE history_id = ?", (history_id,)).fetchone()
+        return ProxyFlowSummary.model_validate_json(row["flow_json"]) if row else None
+
+    def delete_proxy_flow(self, flow_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM proxy_flows WHERE id = ?", (flow_id,))
+        return cursor.rowcount > 0
+
+    def clear_proxy_flows(self) -> list[ProxyFlowSummary]:
+        flows = self.list_proxy_flows(limit=100000)
+        with self._connect() as connection:
+            connection.execute("DELETE FROM proxy_flows")
+        return flows
 
     def _row_to_history(self, row: sqlite3.Row) -> HistoryItem:
         return HistoryItem(

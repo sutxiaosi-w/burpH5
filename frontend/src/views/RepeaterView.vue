@@ -8,19 +8,19 @@ const workspace = useWorkspaceStore()
 const entryName = ref('重放请求')
 const selectedCollectionId = ref('')
 const newCollectionName = ref('')
-const parseMessage = ref('将原始 HTTP 自动拆成方法、地址、请求头和请求体，方便确认粘贴的数据包是否被正确识别。')
+const parseMessage = ref('把原始 HTTP 报文拆成结构化字段，便于快速检查方法、地址、请求头和请求体。')
 let parseTimer: ReturnType<typeof setTimeout> | null = null
 
 const parsedPreview = computed(() =>
   workspace.repeaterParsedRequest
     ? JSON.stringify(workspace.repeaterParsedRequest, null, 2)
-    : '这里会显示结构化后的请求信息。\n\n建议直接粘贴完整的原始 HTTP 数据包，系统会自动帮你解析。',
+    : '这里会显示解析后的请求结构。\n\n建议直接粘贴完整原始 HTTP 报文。',
 )
 
 async function parseRequest(silent = false) {
   try {
     await workspace.parseRepeaterRequest()
-    parseMessage.value = '这里展示的是结构化检查结果，主要用于确认方法、URL、请求头和请求体是否被正确识别。'
+    parseMessage.value = '解析结果仅用于核对结构，不会替代你提交的原始报文。'
   } catch (error) {
     workspace.repeaterParsedRequest = null
     if (!silent) {
@@ -70,8 +70,9 @@ watch(
   <section class="page">
     <div class="page-header">
       <div>
+        <span class="page-kicker">REPLAY</span>
         <h2>请求重放</h2>
-        <p>编辑原始数据包，检查结构化结果，再通过后端发起请求重放。</p>
+        <p>直接编辑原始报文，核对解析结构，然后发起一次真实请求。</p>
       </div>
       <div class="toolbar">
         <button class="button secondary" @click="parseRequest()">重新解析</button>
@@ -84,16 +85,16 @@ watch(
     <div class="panel-grid repeater-grid">
       <section class="panel">
         <div class="panel-title-row">
-          <h3>原始请求</h3>
-          <span class="muted">直接粘贴或编辑完整 HTTP 原文</span>
+          <h3>原始报文</h3>
+          <span class="muted">完整 HTTP 请求原文</span>
         </div>
         <CodeEditor v-model="workspace.repeaterRawRequest" mode="http" />
       </section>
 
       <section class="panel">
         <div class="panel-title-row">
-          <h3>结构化检查结果</h3>
-          <span class="muted">自动解析后的结构化结果</span>
+          <h3>解析预览</h3>
+          <span class="muted">字段级核对视图</span>
         </div>
         <p class="muted panel-helper">{{ parseMessage }}</p>
         <CodeEditor :model-value="parsedPreview" mode="json" read-only />
@@ -104,7 +105,7 @@ watch(
       <section class="panel">
         <div class="panel-title-row">
           <h3>保存到集合</h3>
-          <span class="muted">把当前请求加入已有集合，或者创建一个新集合</span>
+          <span class="muted">加入现有集合，或顺手新建一个</span>
         </div>
         <div class="form-grid">
           <label>

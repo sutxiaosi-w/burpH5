@@ -3,19 +3,33 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
-from burph5.models import ProxySettings
+from burph5.models import Header, ProxyFlowSummary, ProxySettings
+from burph5.services.certificates import CertificateAuthority
+from burph5.services.proxy_transport import ProxyRequestMessage, ProxyTransport
+
+
+DEFAULT_BYPASS_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "::1",
+}
 
 
 class ProxyController:
     def __init__(
         self,
-        handler: Callable[[str], Awaitable[bytes]],
+        transport: ProxyTransport,
+        on_flow_complete: Callable[[ProxyFlowSummary], Awaitable[None]],
         settings: ProxySettings | None = None,
+        certificate_authority: CertificateAuthority | None = None,
     ) -> None:
-        self._handler = handler
+        self._transport = transport
+        self._on_flow_complete = on_flow_complete
         self._settings = settings or ProxySettings()
+        self._certificate_authority = certificate_authority
         self._server: asyncio.base_events.Server | None = None
         self._server_task: asyncio.Task[None] | None = None
+        self._last_error: str | None = None
 
     @property
     def settings(self) -> ProxySettings:
@@ -24,6 +38,10 @@ class ProxyController:
     @property
     def running(self) -> bool:
         return self._server is not None
+
+    @property
+    def last_error(self) -> str | None:
+        return self._last_error
 
     async def apply_settings(self, settings: ProxySettings) -> ProxySettings:
         self._settings = settings
@@ -36,6 +54,7 @@ class ProxyController:
     async def start(self) -> None:
         if self._server is not None:
             return
+        self._last_error = None
         self._server = await asyncio.start_server(
             self._handle_client,
             host=self._settings.host,
@@ -59,52 +78,123 @@ class ProxyController:
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            head = await self._read_head(reader)
-            if not head:
-                return
-            request_line = head.split(b"\r\n", 1)[0].decode("latin-1", errors="replace")
-            if request_line.upper().startswith("CONNECT "):
-                await self._handle_connect(request_line, reader, writer)
+            await self._serve_client(reader, writer)
+        except Exception as exc:
+            self._last_error = str(exc)
+            if not writer.is_closing():
+                writer.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                await writer.drain()
+        finally:
+            if not writer.is_closing():
+                writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    async def _serve_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        while True:
+            message = await self._read_request(reader)
+            if message is None:
                 return
 
-            header_blob, separator, _ = head.partition(b"\r\n\r\n")
-            body = await self._read_body(reader, head)
-            raw_request = (header_blob + separator + body).decode("latin-1", errors="replace")
-            response_bytes = await self._handler(raw_request)
-            writer.write(response_bytes)
-            await writer.drain()
-        finally:
-            writer.close()
-            await writer.wait_closed()
+            if message.method == "CONNECT":
+                await self._handle_connect(message, reader, writer)
+                return
+
+            if self._requires_passthrough(message):
+                flow = await self._transport.passthrough_upgrade(
+                    message=message,
+                    reader=reader,
+                    writer=writer,
+                    default_scheme="http",
+                    is_tls_mitm=False,
+                )
+            else:
+                flow = await self._transport.forward_request(
+                    message=message,
+                    reader=reader,
+                    writer=writer,
+                    default_scheme="http",
+                    is_tls_mitm=False,
+                )
+            await self._on_flow_complete(flow)
+
+            if self._should_close_after_response(message):
+                return
 
     async def _handle_connect(
         self,
-        request_line: str,
+        message: ProxyRequestMessage,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
-        target = request_line.split(" ", 2)[1]
-        host, _, port_text = target.partition(":")
-        port = int(port_text or "443")
-        upstream_reader, upstream_writer = await asyncio.open_connection(host, port)
+        host, port = self._parse_connect_target(message.target)
+        if not self._settings.capture_https or self._matches_bypass_host(host):
+            flow = await self._transport.relay_tunnel(
+                connect_message=message,
+                reader=reader,
+                writer=writer,
+                host=host,
+                port=port,
+            )
+            await self._on_flow_complete(flow)
+            return
+
+        if self._certificate_authority is None:
+            raise RuntimeError("HTTPS capture requires a certificate authority.")
+
         writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
         await writer.drain()
+        await writer.start_tls(self._certificate_authority.create_server_context(host), ssl_handshake_timeout=10.0)
 
-        async def relay(source: asyncio.StreamReader, sink: asyncio.StreamWriter) -> None:
-            try:
-                while not source.at_eof():
-                    data = await source.read(65536)
-                    if not data:
-                        break
-                    sink.write(data)
-                    await sink.drain()
-            finally:
-                sink.close()
+        while True:
+            tunneled_message = await self._read_request(reader)
+            if tunneled_message is None:
+                return
+            tunneled_message.authority = f"{host}:{port}" if port not in {80, 443} else host
 
-        await asyncio.gather(
-            relay(reader, upstream_writer),
-            relay(upstream_reader, writer),
-        )
+            if self._requires_passthrough(tunneled_message):
+                flow = await self._transport.passthrough_upgrade(
+                    message=tunneled_message,
+                    reader=reader,
+                    writer=writer,
+                    default_scheme="https",
+                    is_tls_mitm=True,
+                )
+            else:
+                flow = await self._transport.forward_request(
+                    message=tunneled_message,
+                    reader=reader,
+                    writer=writer,
+                    default_scheme="https",
+                    is_tls_mitm=True,
+                )
+            await self._on_flow_complete(flow)
+
+            if self._should_close_after_response(tunneled_message):
+                return
+
+    async def _read_request(self, reader: asyncio.StreamReader) -> ProxyRequestMessage | None:
+        head = await self._read_head(reader)
+        if not head:
+            return None
+
+        header_blob, _, initial_body = head.partition(b"\r\n\r\n")
+        lines = header_blob.decode("latin-1", errors="replace").split("\r\n")
+        if not lines or not lines[0]:
+            return None
+
+        request_line = lines[0].strip()
+        parts = request_line.split(" ", 2)
+        if len(parts) < 2:
+            raise ValueError("Proxy request line is invalid.")
+
+        method = parts[0].upper()
+        target = parts[1]
+        version = parts[2] if len(parts) > 2 else "HTTP/1.1"
+        headers = self._parse_headers(lines[1:])
+        return ProxyRequestMessage(method=method, target=target, version=version, headers=headers, body=initial_body)
 
     async def _read_head(self, reader: asyncio.StreamReader) -> bytes:
         data = b""
@@ -117,16 +207,61 @@ class ProxyController:
                 raise ValueError("Request head exceeded 1MB.")
         return data
 
-    async def _read_body(self, reader: asyncio.StreamReader, head: bytes) -> bytes:
-        header_blob, _, initial_body = head.partition(b"\r\n\r\n")
-        content_length = 0
-        for line in header_blob.decode("latin-1", errors="replace").split("\r\n")[1:]:
-            if line.lower().startswith("content-length:"):
-                content_length = int(line.split(":", 1)[1].strip() or "0")
-                break
+    def _parse_headers(self, lines: list[str]) -> list:
+        headers: list[Header] = []
+        for line in lines:
+            if not line.strip() or ":" not in line:
+                continue
+            name, value = line.split(":", 1)
+            headers.append(Header(name=name.strip(), value=value.lstrip()))
+        return headers
 
-        body = initial_body
-        remaining = max(content_length - len(body), 0)
-        if remaining:
-            body += await reader.readexactly(remaining)
-        return body
+    def _should_close_after_response(self, message: ProxyRequestMessage) -> bool:
+        connection = self._get_header(message.headers, "connection")
+        if connection and "close" in connection.lower():
+            return True
+        return message.version.upper() == "HTTP/1.0"
+
+    def _requires_passthrough(self, message: ProxyRequestMessage) -> bool:
+        connection = (self._get_header(message.headers, "connection") or "").lower()
+        upgrade = (self._get_header(message.headers, "upgrade") or "").lower()
+        return "upgrade" in connection or bool(upgrade) or self._get_header(message.headers, "sec-websocket-key") is not None
+
+    def _get_header(self, headers: list[Header], name: str) -> str | None:
+        for header in headers:
+            if header.name.lower() == name.lower():
+                return header.value
+        return None
+
+    def _matches_bypass_host(self, host: str) -> bool:
+        normalized_host = self._normalize_host(host)
+        for pattern in [*DEFAULT_BYPASS_HOSTS, *self._settings.bypass_hosts]:
+            normalized_pattern = self._normalize_host(pattern)
+            if not normalized_pattern:
+                continue
+            if normalized_host == normalized_pattern or normalized_host.endswith(f".{normalized_pattern}"):
+                return True
+        return False
+
+    def _parse_connect_target(self, target: str) -> tuple[str, int]:
+        normalized = target.strip()
+        if normalized.startswith("["):
+            closing = normalized.find("]")
+            if closing == -1:
+                raise ValueError(f"CONNECT target is invalid: {target}")
+            host = normalized[1:closing]
+            remainder = normalized[closing + 1 :]
+            if remainder.startswith(":"):
+                return host, int(remainder[1:] or "443")
+            return host, 443
+
+        host, separator, port_text = normalized.rpartition(":")
+        if separator:
+            return host, int(port_text or "443")
+        return normalized, 443
+
+    def _normalize_host(self, host: str) -> str:
+        normalized = host.strip().lower()
+        if normalized.startswith("[") and normalized.endswith("]"):
+            normalized = normalized[1:-1]
+        return normalized.rstrip(".")

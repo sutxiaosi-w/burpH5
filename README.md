@@ -34,8 +34,8 @@ python -m pip install -r requirements.txt
 
 ```powershell
 cd frontend
-npm.cmd install
-npm.cmd run build
+npm install
+npm run build
 ```
 
 然后回到仓库根目录启动：
@@ -44,9 +44,11 @@ npm.cmd run build
 python app.py
 ```
 
-Windows 下也可以直接双击：
+Windows 下也可以直接双击，或者在 `cmd` 中执行：
 
-- `启动burph5.bat`
+- `startburph5.bat`
+
+该脚本会自动切到仓库根目录，使用 `py` 或 `python` 启动 `app.py`，并尝试打开默认浏览器访问：
 
 默认访问地址：
 
@@ -64,8 +66,8 @@ python -m burph5.cli serve
 
 ```powershell
 cd frontend
-npm.cmd install
-npm.cmd run dev
+npm install
+npm run dev
 ```
 
 ## 代理
@@ -194,5 +196,5 @@ cd backend
 pytest -q
 
 cd ../frontend
-npm.cmd run build
+npm run build
 ```
